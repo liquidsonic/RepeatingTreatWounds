@@ -88,6 +88,11 @@ const renderDialogContent = () => `
         : ""
     }
 
+  <div class="form-group">
+        <label>Double healing for an hour?</label>
+        <input type="checkbox" id="healForHour" name="healForHour" value="false"/>
+    </div>
+
     <div class="form-group">
         <label>Medicine DC:</label>
         <select id="dc-type" name="dc-type">
@@ -109,14 +114,14 @@ const renderDialogContent = () => `
     </div>
 
         ${
-          !checkIfFeat("continual-recovery")
-            ? `
+      !checkIfFeat("continual-recovery")
+        ? `
   <div class="form-group">
         <label>Used every 10 minutes?</label>
         <input type="checkbox" id="hourCountorMinuteCount" name="hourCountorMinuteCount" value="false"/>
     </div>`
-            : ""
-        }
+        : ""
+    }
 
         <div class="form-group">
         <label>Bonus healing Applies to all Targets?</label>
@@ -147,6 +152,7 @@ const applyChanges = async ($html) => {
   var modifier = parseInt($html.find('[name="modifier"]').val()) || 0;
   var bonusTargets = $html.find('[name="bonusTargets"]')[0]?.checked;
   var firstTargets = $html.find('[name="firstTargets"]')[0]?.checked;
+  var healForHour = $html.find('[name="healForHour"]')[0]?.checked;
   var additionalHealing = $html.find('[name="additionalHealing"]').val() || 0;
   bonusHealing = { 20: 10, 30: 30, 40: 50 }[dc] || 0;
 
@@ -176,9 +182,9 @@ const applyChanges = async ($html) => {
   // Main treatment loop, capped at 30 cycles (30 hours max)
   let whileLoopCount = 0,
     maxIterations = 30;
-  chat += `<table><tr><th>Target</th><th>Roll<br>(+${
+  chat += `<table style="font-size: 14px; border-collapse: collapse; width: 100%; table-layout: fixed;"><tr><th style="padding: 0 2px;">Target</th><th style="padding: 0 2px;">Roll<br>(+${
     playerToken.actor.system.skills.medicine.totalModifier + modifier
-  })</th><th>Result</th><th>HP +/- <br>(+Bon)</th><th>Current HP</th></tr>`;
+  })</th><th style="padding: 0 2px;">Result</th><th style="padding: 0 2px;">HP +/- <br>(+Bon)</th><th style="padding: 0 2px;">Current HP</th></tr>`;
 
   // Determine Ward Medic capacity based on medicine skill
   wardMedic = playerToken.actor.itemTypes.feat.some(
@@ -215,19 +221,23 @@ const applyChanges = async ($html) => {
         modifier;
       let result,
         hpChange = 0;
-
+        let dblhealForHour = 1; // Default healing multiplier
+      // If healForHour is checked, double the healing for the hour
+      if (healForHour) {
+        dblhealForHour = 2; // Double healing bonus for the hour
+      }
       let externalHeals = 0;
 
       // Standard treatment or Risky Surgery logic
       if (!isRiskySurgery) {
         if (totalRoll + crit >= dc + 10) {
           hpChange =
-            (await new Roll("4d8").evaluate({ async: true })).total +
+            (await new Roll("4d8").evaluate({ async: true })).total*dblhealForHour +
             bonusHealing;
           result = "CrS";
         } else if (totalRoll + crit >= dc) {
           hpChange =
-            (await new Roll("2d8").evaluate({ async: true })).total +
+            (await new Roll("2d8").evaluate({ async: true })).total*dblhealForHour +
             bonusHealing;
           result = "Suc";
         } else if (totalRoll + crit <= dc - 10) {
@@ -254,6 +264,10 @@ const applyChanges = async ($html) => {
         }
       }
 
+
+
+
+
       // If bonus targets is checked in the UI prompt, heal all targets
       if (bonusTargets) {
         externalHeals = (
@@ -272,25 +286,27 @@ const applyChanges = async ($html) => {
         hpChange += externalHeals;
       }
 
-      // If continual recovery is inactive and 10 minute per ability is. Roll the dice an additional five times and add
+            // If continual recovery is inactive and 10 minute per ability is. Roll the dice an additional five times and add
 
-      if (!checkIfFeat("continual-recovery") && hourCountorMinuteCount) {
-        externalHeals += (
-          await new Roll(additionalHealing).evaluate({ async: true })
-        ).total;
-        externalHeals += (
-          await new Roll(additionalHealing).evaluate({ async: true })
-        ).total;
-        externalHeals += (
-          await new Roll(additionalHealing).evaluate({ async: true })
-        ).total;
-        externalHeals += (
-          await new Roll(additionalHealing).evaluate({ async: true })
-        ).total;
-        externalHeals += (
-          await new Roll(additionalHealing).evaluate({ async: true })
-        ).total;
-      }
+      if (!checkIfFeat("continual-recovery") && hourCountorMinuteCount)
+
+        {
+          externalHeals += (
+            await new Roll(additionalHealing).evaluate({ async: true })
+          ).total;
+          externalHeals += (
+            await new Roll(additionalHealing).evaluate({ async: true })
+          ).total;
+          externalHeals += (
+            await new Roll(additionalHealing).evaluate({ async: true })
+          ).total;
+          externalHeals += (
+            await new Roll(additionalHealing).evaluate({ async: true })
+          ).total;
+          externalHeals += (
+            await new Roll(additionalHealing).evaluate({ async: true })
+          ).total;
+        }
 
       // Clamp HP to max and update healing status
       currentHpArray[targetIndex] = clamp(
@@ -298,7 +314,7 @@ const applyChanges = async ($html) => {
         0,
         maxHpArray[targetIndex]
       );
-      let hpDisplay = `${currentHpArray[targetIndex]}/${maxHpArray[targetIndex]}`;
+      let hpDisplay = `${currentHpArray[targetIndex]}/<br>${maxHpArray[targetIndex]}`;
 
       if (currentHpArray[targetIndex] >= maxHpArray[targetIndex]) {
         fullyHealedTokens.add(healingQueue[i].name);
@@ -314,18 +330,16 @@ const applyChanges = async ($html) => {
           ? "style='background-color: lightyellow;'"
           : "";
 
-      chat += `<tr ${rowStyle}><td>${healingQueue[i].name.substring(
+      chat += `<tr ${rowStyle}><td style="padding: 0 2px; white-space: nowrap;">${healingQueue[i].name.substring(
         0,
         6
-      )}...</td><td>${
+      )}...</td><td style="padding: 0 8px;">${
         roll + playerToken.actor.system.skills.medicine.totalModifier + modifier
-      }</td><td>${result}</td><td>${hpChange - externalHeals}${
-        (externalHeals != 0 && i == 0 && firstTargets) ||
-        bonusTargets ||
-        hourCountorMinuteCount
-          ? `(+${externalHeals})`
+      }</td><td style="padding: 0 8px;">${result}</td><td style="white-space: nowrap; text-align: center;">${hpChange - externalHeals}${
+        (externalHeals != 0 && i == 0 && firstTargets) || bonusTargets || hourCountorMinuteCount
+          ? `<br>(+${externalHeals})`
           : ``
-      } </td><td>${hpDisplay}</td></tr>`;
+      } </td><td style="padding: 0 8px;">${hpDisplay}</td></tr>`;
     }
 
     // Prepare next queue based on remaining targets
@@ -335,7 +349,7 @@ const applyChanges = async ($html) => {
     remainingQueue = remainingQueue.slice(wardMedic - newQueue.length);
 
     // Track time spent
-    hourCount += checkIfFeat("continual-recovery") ? 0.167 : 1;
+    hourCount += checkIfFeat("continual-recovery") || !healForHour ? 0.167 : 1;
     chat += `<tr style="background-color: black; color: white;"><td colspan="5">${Math.floor(
       hourCount
     )} hours, ${Math.round((hourCount % 1) * 60)} minutes elapsed</td></tr>`;
