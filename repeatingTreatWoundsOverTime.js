@@ -171,7 +171,7 @@ const applyChanges = async ($html) => {
     modifier += 2;
   }
 
-  if (additionalHealing != 0) {
+  if (additionalHealing !="1d0") {
     chat += `<p><b>Receiving Bonus Healing:</b> An additional source is adding ${additionalHealing} HP per ${
       hourCountorMinuteCount || checkIfFeat("continual-recovery")
         ? ` 10 minutes`
